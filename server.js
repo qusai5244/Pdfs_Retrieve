@@ -115,26 +115,31 @@ app.get('/showFiles/:word', async (req, res) => {
     const word = req.params.word;
     // Use the Pdf_data model to find all PDF data in the database
     const pdfData = await Pdf_data.find();
-    const idsContainingWord = [];
+    const matchingData = {};
 
     for (let i = 0; i < pdfData.length; i++) {
       const sentences = pdfData[i].sentences;
+      const matchingSentences = [];
       for (let j = 0; j < sentences.length; j++) {
         const sentence = sentences[j];
+        // Check if the sentence contains the word (ignoring case)
         if (sentence.toLowerCase().includes(word.toLowerCase())) {
-          idsContainingWord.push(pdfData[i]._id);
-          break;
+          matchingSentences.push(sentence);
         }
+      }
+      // If there are any matching sentences, add them to the matchingData object
+      if (matchingSentences.length > 0) {
+        matchingData[pdfData[i]._id] = matchingSentences;
       }
     }
 
-    console.log("Pdf_data instances containing the word:", idsContainingWord);
-    // Return the PDF data as a JSON response
-    res.json(idsContainingWord);
+    // Return the matching PDF data as a JSON response
+    res.json(matchingData);
   } catch (err) {
     console.error(err);
     res.status(500).send("An error occurred while retrieving the PDF data.");
   }
+
 });
 
 app.get('/showFiles', async (req,res) => {
