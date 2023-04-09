@@ -130,12 +130,22 @@ app.get('/showFiles/:word', async (req, res) => {
 
     console.log("Pdf_data instances containing the word:", idsContainingWord);
     // Return the PDF data as a JSON response
-    res.json(pdfData);
+    res.json(idsContainingWord);
   } catch (err) {
     console.error(err);
     res.status(500).send("An error occurred while retrieving the PDF data.");
   }
 });
+
+app.get('/showFiles', async (req,res) => {
+  try {
+    const pdfData = await Pdf_data.find();
+    res.json(pdfData);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send("An error occurred while retrieving the data.");
+  }
+})
 
 
 // Start the server
