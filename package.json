@@ -22,6 +22,7 @@
     "natural": "^6.2.0",
     "pdf-parse": "^1.1.1",
     "shortid": "^2.2.16",
+    "stopword": "^2.0.8",
     "stopwords": "^0.0.9"
   },
   "devDependencies": {

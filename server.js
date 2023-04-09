@@ -9,6 +9,7 @@ const upload = multer();
 const bodyParser = require('body-parser');
 const Pdf_data = require('./models/pdf_data')
 const pdf = require('pdf-parse');
+const path = require('path');
 
 // Parse JSON request bodies
 app.use(bodyParser.json());
@@ -41,12 +42,10 @@ const storage = new Storage({
 const bucket = storage.bucket(process.env.BUCKET);
 
 
-// pdfs files
-const folderPath = './pdf_folder';
-
 app.post('/addFiles', async (req, res) => {
   try {
     // Get a list of all the PDF files in the folder
+    const folderPath = 'pdf_folder';
     const files = await fs.promises.readdir(folderPath);
     const filesCount = files.length;
     let filesProcessed = 0;
@@ -110,6 +109,16 @@ app.post('/addFiles', async (req, res) => {
   }
 });
 
+app.get('/showFiles', async (req,res) => {
+  try {
+    const pdfData = await Pdf_data.find();
+    res.json(pdfData);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send("An error occurred while retrieving the data.");
+  }
+})
+
 app.get('/showFiles/:word', async (req, res) => {
   try {
     const word = req.params.word;
@@ -122,8 +131,10 @@ app.get('/showFiles/:word', async (req, res) => {
       const matchingSentences = [];
       for (let j = 0; j < sentences.length; j++) {
         const sentence = sentences[j];
-        // Check if the sentence contains the word (ignoring case)
-        if (sentence.toLowerCase().includes(word.toLowerCase())) {
+        // Split the sentence into words using a regular expression
+        const words = sentence.split(/\b\W+\b/);
+        // Check if the word is in the sentence (ignoring case)
+        if (words.some(w => w.toLowerCase() === word.toLowerCase())) {
           matchingSentences.push(sentence);
         }
       }
@@ -142,30 +153,91 @@ app.get('/showFiles/:word', async (req, res) => {
 
 });
 
-app.get('/showFiles', async (req,res) => {
-  try {
-    const pdfData = await Pdf_data.find();
-    res.json(pdfData);
-  } catch (err) {
-    console.error(err);
-    res.status(500).send("An error occurred while retrieving the data.");
-  }
-})
 
-
-app.get('/showFileSentences/:id' , getFile, (req, res) => {
+app.get('/showFileSentences/:id' , getParams, (req, res) => {
   res.send(res.file.sentences)
 })
+
+//Check the occurrence of a word in PDF. Give the total number of times the word is found, in addition to all the sentences the word is found in
+app.get('/search/:id/:word', async (req, res) => {
+  try {
+    const word = req.params.word;
+    let totalOccurrence = 0;
+
+    // Loop through all saved PDF files
+    const file = await Pdf_data.findById(req.params.id);
+    const sentences = file.sentences;
+    let count = 0;
+    const occurrences = [];
+
+    // Loop through each sentence in the PDF file and search for the given word
+    for (const sentence of sentences) {
+      const regex = new RegExp(`\\b${word}\\b`, 'gi'); // match whole words only
+      if (sentence.match(regex)) {
+        count++;
+        occurrences.push(sentence);
+      }
+    }
+
+    // If the word was found in the PDF file, add it to the result array
+    if (count > 0) {
+      totalOccurrence += count;
+    }
+
+    // Return the result to the client
+    res.status(200).send({
+      totalOccurrence: totalOccurrence,
+      occurrences: occurrences,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('An error occurred while searching for the word.');
+  }
+});
+
+const stopword = require('stopword');
+
+//Give the top 5 occurring words in a PDF – try to make sure that these words are relevant, so filtering out stop words may be a good idea (e.g. the, it, and, is, or, but)
+app.get('/topwords/:id', getParams, async (req, res) => {
+  try {
+    const content = res.file.sentences;
+
+    // Parse the PDF content and extract all the words
+    const words = content.join(' ').split(/[\s.,;]+/);
+
+    // Filter out stop words
+    const filteredWords = stopword.removeStopwords(words, stopword.eng);
+
+    // Count the occurrence of each word and store it in a map
+    const wordMap = new Map();
+    filteredWords.forEach(word => {
+      const count = wordMap.get(word) || 0;
+      wordMap.set(word, count + 1);
+    });
+
+    // Sort the map by the occurrence count in descending order
+    const sortedWords = [...wordMap].sort((a, b) => b[1] - a[1]);
+
+    // Return the top 5 words with the highest occurrence count
+    const topWords = sortedWords.slice(0, 5).map(([word, count]) => ({ word, count }));
+
+    res.status(200).json({ topWords });
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('An error occurred while getting the top words.');
+  }
+});
+
 
 
 
 //a middleware function that detects the parameters of an API
-async function getFile(req, res, next) {
+async function getParams(req, res, next) {
   let file
   try {
     file = await Pdf_data.findById(req.params.id)
     if (file == null) {
-      return res.status(404).json({ message: 'Cannot find subscriber' })
+      return res.status(404).json({ message: 'Cannot find file' })
     }
   } catch (err) {
     return next(err)
