@@ -153,6 +153,28 @@ app.get('/showFiles', async (req,res) => {
 })
 
 
+app.get('/showFileSentences/:id' , getFile, (req, res) => {
+  res.send(res.file.sentences)
+})
+
+
+
+//a middleware function that detects the parameters of an API
+async function getFile(req, res, next) {
+  let file
+  try {
+    file = await Pdf_data.findById(req.params.id)
+    if (file == null) {
+      return res.status(404).json({ message: 'Cannot find subscriber' })
+    }
+  } catch (err) {
+    return next(err)
+  }
+
+  res.file = file
+  next()
+}
+
 // Start the server
 app.listen(3000, () => {
   console.log('Server listening on port 3000');
