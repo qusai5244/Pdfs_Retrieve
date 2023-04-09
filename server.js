@@ -228,7 +228,28 @@ app.get('/topwords/:id', getParams, async (req, res) => {
   }
 });
 
+app.delete('/deleteFile/:id', getParams, async (req, res) => {
+  try {
 
+    // Delete the PDF data from MongoDB
+    await Pdf_data.deleteOne(res.file);
+
+    // Delete the file from Firebase
+    const file = bucket.file(res.file.fileName);
+    file.delete()
+      .then(() => {
+        console.log(`File ${res.file.fileName} deleted successfully.`);
+      })
+      .catch((err) => {
+        console.error(`Error deleting file ${res.file.fileName}:`, err);
+      });
+
+    res.status(200).send('File deleted successfully.');
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('An error occurred while deleting the file.');
+  }
+});
 
 
 //a middleware function that detects the parameters of an API
