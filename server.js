@@ -10,6 +10,8 @@ const bodyParser = require('body-parser');
 const Pdf_data = require('./models/pdf_data')
 const pdf = require('pdf-parse');
 const path = require('path');
+const PDFJS = require('pdfjs-dist');
+const stopword = require('stopword');
 
 // Parse JSON request bodies
 app.use(bodyParser.json());
@@ -41,7 +43,30 @@ const storage = new Storage({
 });
 const bucket = storage.bucket(process.env.BUCKET);
 
+// Retrieve a stored PDF given the ID
+app.get('/file/:id', getParams,async (req, res) => {
+  try {
+    const name = res.file.fileName;
+    const [files] = await bucket.getFiles();
 
+    // Find the file with the given name
+    const file = files.find(file => file.name === name);
+
+    if (!file) {
+      // Return a 404 response if the file is not found
+      return res.status(404).send('File not found.');
+    }
+
+    // Get a readable stream for the file and pipe it to the response
+    const stream = file.createReadStream();
+    stream.pipe(res);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('An error occurred while retrieving the file.');
+  }
+});
+
+// add files
 app.post('/addFiles', async (req, res) => {
   try {
     // Get a list of all the PDF files in the folder
@@ -109,6 +134,7 @@ app.post('/addFiles', async (req, res) => {
   }
 });
 
+// return all files
 app.get('/showFiles', async (req,res) => {
   try {
     const pdfData = await Pdf_data.find();
@@ -119,6 +145,7 @@ app.get('/showFiles', async (req,res) => {
   }
 })
 
+//Search for the existence of a certain keyword in all stored PDF's
 app.get('/showFiles/:word', async (req, res) => {
   try {
     const word = req.params.word;
@@ -153,7 +180,7 @@ app.get('/showFiles/:word', async (req, res) => {
 
 });
 
-
+// Return all the parsed sentences for a given PDF ID
 app.get('/showFileSentences/:id' , getParams, (req, res) => {
   res.send(res.file.sentences)
 })
@@ -195,7 +222,6 @@ app.get('/search/:id/:word', async (req, res) => {
   }
 });
 
-const stopword = require('stopword');
 
 //Give the top 5 occurring words in a PDF – try to make sure that these words are relevant, so filtering out stop words may be a good idea (e.g. the, it, and, is, or, but)
 app.get('/topwords/:id', getParams, async (req, res) => {
@@ -228,6 +254,7 @@ app.get('/topwords/:id', getParams, async (req, res) => {
   }
 });
 
+//	Delete a PDF file and all its related data (given only the PDF ID)
 app.delete('/deleteFile/:id', getParams, async (req, res) => {
   try {
 
@@ -250,7 +277,6 @@ app.delete('/deleteFile/:id', getParams, async (req, res) => {
     res.status(500).send('An error occurred while deleting the file.');
   }
 });
-
 
 //a middleware function that detects the parameters of an API
 async function getParams(req, res, next) {
