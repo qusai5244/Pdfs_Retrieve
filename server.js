@@ -10,6 +10,7 @@ const Pdf_data = require('./models/pdf_data')
 const pdf = require('pdf-parse');
 const path = require('path');
 const PDFJS = require('pdfjs-dist');
+const pdfPoppler = require('pdf-poppler');
 const stopword = require('stopword');
 
 // Parse JSON request bodies
@@ -97,7 +98,9 @@ app.post('/upload', multer.array('files'), async (req, res) => {
 
   res.status(200).send(`${files.length} files uploaded successfully.`);
 });
+///
 
+//////
 
 // Retrieve a stored PDF given the ID
 app.get('/file/:id', getParams,async (req, res) => {
@@ -122,8 +125,64 @@ app.get('/file/:id', getParams,async (req, res) => {
   }
 });
 
-// return all files
-app.get('/showFiles', async (req,res) => {
+
+app.get('/filee/:id', getParams, async (req, res) => {
+  try {
+    const name = res.file.fileName;
+    const [files] = await bucket.getFiles();
+
+    // Find the file with the given name
+    const file = files.find(file => file.name === name);
+
+    if (!file) {
+      // Return a 404 response if the file is not found
+      return res.status(404).send('File not found.');
+    }
+
+    // Get a readable stream for the file
+    const stream = file.createReadStream();
+
+    // Create a writable stream to save the file locally
+    const localFilePath = `./${name}`;
+    const writeStream = fs.createWriteStream(localFilePath);
+
+    // Pipe the file data to the writable stream
+    stream.pipe(writeStream);
+
+    // Wait for the file to be saved locally
+    writeStream.on('finish', () => {
+      res.status(200).send(`File ${name} was saved locally.`);
+    });
+
+    writeStream.on('error', (err) => {
+      console.error(err);
+      res.status(500).send('An error occurred while saving the file locally.');
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('An error occurred while retrieving the file.');
+  }
+});
+
+const auth = require('basic-auth');
+
+function requireAuth(req, res, next) {
+  const credentials = auth(req);
+  if (!credentials || credentials.name !== 'admin' || credentials.pass !== 'admin') {
+    res.statusCode = 401;
+    res.setHeader('WWW-Authenticate', 'Basic realm="Enter your username and password."');
+    res.end('Access denied');
+  } else {
+    next();
+  }
+}
+// const username = 'admin';
+// const password = 'admin';
+// const encodedCredentials = btoa(`${username}:${password}`);
+// console.log(encodedCredentials); // "YWRtaW46YWRtaW4="
+
+app.get('/showFiles', requireAuth, async (req, res) => {
   try {
     const pdfData = await Pdf_data.find();
     res.json(pdfData);
@@ -131,10 +190,147 @@ app.get('/showFiles', async (req,res) => {
     console.error(err);
     res.status(500).send("An error occurred while retrieving the data.");
   }
-})
+});
+
+app.get('/convert', (req, res) => {
+  const pdfPath = 'epics.pdf';
+  const outputPath = 'pdf_folder';
+
+  const options = {
+    format: 'jpg',
+    out_dir: outputPath,
+    out_prefix: 'image',
+    page: 2 // the page number you want to convert
+  };
+
+  pdfPoppler.convert(pdfPath, options)
+    .then(() => res.send('Success'))
+    .catch(error => res.status(500).send(error));
+});
+
+app.get('/image', (req, res) => {
+  const imageName = 'image-2.jpg';
+  const imagePath = path.join(__dirname, 'pdf_folder', imageName);
+
+  // Check if the image file exists
+  fs.access(imagePath, fs.constants.F_OK, (err) => {
+    if (err) {
+      console.error(`Image not found: ${imagePath}`);
+      return res.status(404).send('Image not found.');
+    }
+
+    // Read the image file and send it as a response
+    const imageStream = fs.createReadStream(imagePath);
+    imageStream.pipe(res);
+  });
+});
+
+
+
+
+
+
+app.get('/process/:id/:pageNumber', getParams, async (req, res) => {
+  try {
+    // 1. Save the file locally
+    const name = res.file.fileName;
+    const page_number = req.params.pageNumber; // Use req.params instead of res.params
+    const [files] = await bucket.getFiles();
+
+    // Find the file with the given name
+    const file = files.find(file => file.name === name);
+
+    if (!file) {
+      // Return a 404 response if the file is not found
+      return res.status(404).send('File not found.');
+    }
+
+    // Get a readable stream for the file
+    const stream = file.createReadStream();
+
+    // Create a writable stream to save the file locally
+    const localFilePath = `./pdf_folder/${name}`;
+    const writeStream = fs.createWriteStream(localFilePath);
+
+    // Pipe the file data to the writable stream
+    stream.pipe(writeStream);
+
+    // Wait for the file to be saved locally
+    writeStream.on('finish', async () => {
+      // 2. Convert PDF to image
+      const pdfPath = localFilePath;
+      const outputPath = 'pdf_folder';
+      const options = {
+        format: 'jpg',
+        out_dir: outputPath,
+        out_prefix: 'image',
+        page: page_number, // the page number you want to convert
+      };
+
+      try {
+        await pdfPoppler.convert(pdfPath, options);
+
+        // 3. Send the image as a response
+        const imageName = `image-${page_number}.jpg`; // Use the correct image name based on page number
+        const imagePath = path.join(__dirname, 'pdf_folder', imageName);
+
+        // Check if the image file exists
+        fs.access(imagePath, fs.constants.F_OK, (err) => {
+          if (err) {
+            console.error(`Image not found: ${imagePath}`);
+            return res.status(404).send('Image not found.');
+          }
+
+          // Read the image file and send it as a response
+          const imageStream = fs.createReadStream(imagePath);
+          imageStream.pipe(res);
+
+          // 4. Delete the PDF and image files after the response is sent
+          imageStream.on('end', () => {
+            fs.unlinkSync(pdfPath);
+            fs.unlinkSync(imagePath);
+          });
+        });
+      } catch (error) {
+        res.status(500).send(error);
+      }
+    });
+
+    writeStream.on('error', (err) => {
+      console.error(err);
+      res.status(500).send('An error occurred while saving the file locally.');
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('An error occurred while retrieving the file.');
+  }
+});
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 //Search for the existence of a certain keyword in all stored PDF's
-app.get('/showFiles/:word', async (req, res) => {
+app.get('/showFiles/:word',requireAuth, async (req, res) => {
   try {
     const word = req.params.word;
     // Use the Pdf_data model to find all PDF data in the database
@@ -266,6 +462,53 @@ app.delete('/deleteFile/:id', getParams, async (req, res) => {
   }
 });
 
+app.delete('/deleteAllFiles', async (req, res) => {
+  try {
+    // Get all PDF data from MongoDB
+    const pdfDataList = await Pdf_data.find();
+
+    // Get all files from Firebase storage
+    const [files] = await bucket.getFiles();
+
+    let errors = [];
+
+    // Delete files from MongoDB
+    for (const pdfData of pdfDataList) {
+      try {
+        await Pdf_data.deleteOne({ _id: pdfData._id });
+      } catch (err) {
+        console.error(`Error deleting file from MongoDB (${pdfData.fileName}):`, err);
+        errors.push(`Error deleting file from MongoDB (${pdfData.fileName}): ${err.message}`);
+      }
+    }
+
+    // Delete files from Firebase storage
+    for (const file of files) {
+      try {
+        await file.delete();
+      } catch (err) {
+        console.error(`Error deleting file from Firebase (${file.name}):`, err);
+        errors.push(`Error deleting file from Firebase (${file.name}): ${err.message}`);
+      }
+    }
+
+    if (errors.length > 0) {
+      res.status(500).json({
+        message: "Some errors occurred while deleting files.",
+        errors: errors,
+      });
+    } else {
+      res.status(200).send('All files deleted successfully.');
+    }
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('An error occurred while deleting the files.');
+  }
+});
+
+
+
+
 //a middleware function that detects the parameters of an API
 async function getParams(req, res, next) {
   let file
@@ -287,109 +530,3 @@ app.listen(3000, () => {
   console.log('Server listening on port 3000');
 });
 
-
-// add files
-// app.post('/addFiles', async (req, res) => {
-//   try {
-//     // Get a list of all the PDF files in the folder
-//     const folderPath = 'pdf_folder';
-//     const files = await fs.promises.readdir(folderPath);
-//     const filesCount = files.length;
-//     let filesProcessed = 0;
-
-//     // Loop through each file in the folder and upload it
-//     files.forEach(async (file) => {
-//       const filePath = `${folderPath}/${file}`;
-//       const fileContent = await fs.promises.readFile(filePath);
-//       const filename = `${file}`;
-
-//       // Create a write stream to upload the file
-//       const storageFile = bucket.file(filename);
-//       const stream = storageFile.createWriteStream({
-//         metadata: {
-//           contentType: 'application/pdf',
-//         },
-//       });
-
-//       // Handle successful upload
-//       stream.on('finish', () => {
-//         // Parse the PDF file
-//         pdf(fileContent).then(function(data) {
-//           const lines = [];
-//           data.text.split('\n').forEach(line => {
-//             lines.push(line);
-//           });
-
-//           // Drop empty lines from the list
-//           const nonEmptyLines = lines.filter(line => line.trim() !== '');
-//           const stats = fs.statSync(filePath);
-//           const fileSizeInKB = stats.size / 1024;
-
-//           // Create a new Pdf_data instance with the filename, current date, and lines
-//           const pdfData = new Pdf_data({
-//             fileName: filename,
-//             createdAt: new Date(),
-//             pages_number: data.numpages,
-//             sentences: nonEmptyLines,
-//             size :fileSizeInKB.toFixed(2)
-//           });
-
-//           // Save the Pdf_data instance to the database
-//           pdfData.save();
-
-//           // Increment the number of files processed and check if all files have been processed
-//           filesProcessed++;
-//           if (filesProcessed === filesCount) {
-//             // Send a response indicating that all files have been uploaded
-//             res.status(200).send(`${filesCount} files uploaded successfully.`);
-//           }
-//         });
-//       });
-
-//       // Pipe the file data to the write stream
-//       stream.end(fileContent);
-//     });
-
-//   } catch (err) {
-//     console.error(err);
-//     res.status(500).send("An error occurred while uploading the files.");
-//   }
-// });
-
-
-// // Retrieve a stored PDF given the ID
-// app.get('/file/:id', getParams, async (req, res) => {
-//   try {
-//     const name = res.file.fileName;
-//     const [files] = await bucket.getFiles();
-
-//     // Find the file with the given name
-//     const file = files.find(file => file.name === name);
-
-//     if (!file) {
-//       // Return a 404 response if the file is not found
-//       return res.status(404).send('File not found.');
-//     }
-
-//     // Get a readable stream for the file and pipe it to a local file
-//     const stream = file.createReadStream();
-//     const filePath = `./pdf_files/${name}`;
-//     const fileWriteStream = fs.createWriteStream(filePath);
-//     stream.pipe(fileWriteStream);
-
-//     // Handle successful write to file
-//     fileWriteStream.on('finish', () => {
-//       res.status(200).send(`File written to ${filePath} successfully.`);
-//     });
-
-//     // Handle errors writing to file
-//     fileWriteStream.on('error', (err) => {
-//       console.error(err);
-//       res.status(500).send('An error occurred while writing the file.');
-//     });
-
-//   } catch (err) {
-//     console.error(err);
-//     res.status(500).send('An error occurred while retrieving the file.');
-//   }
-// });
