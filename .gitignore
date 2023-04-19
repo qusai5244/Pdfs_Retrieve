@@ -1,1 +1,4 @@
+.env
 node_modules
+pdf_folder
+./models/alnaabi-e6356-firebase-adminsdk-zfgqu-84796810b0.json

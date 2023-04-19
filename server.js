@@ -274,7 +274,7 @@ app.get('/showFileSentences/:id',requireAuth , getParams, (req, res) => {
 })
 
 //Check the occurrence of a word in PDF. Give the total number of times the word is found, in addition to all the sentences the word is found in
-app.get('/search/:id/:word',requireAuth, async (req, res) => {
+app.get('/searchForWord/:id/:word',requireAuth, async (req, res) => {
   try {
     const word = req.params.word;
     let totalOccurrence = 0;
@@ -340,6 +340,47 @@ app.get('/topwords/:id', requireAuth, getParams, async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).send('An error occurred while getting the top words.');
+  }
+});
+
+// Retern relevant Document for a query
+app.get('/showRelevantFiles/:query', requireAuth, async (req, res) => {
+  try {
+    let documents = []
+    let document_ids = []
+    const pdfData = await Pdf_data.find({});
+    for (let i = 0; i < pdfData.length; i++) {
+      se = pdfData[i].sentences.join(' ')
+      documents.push(se)
+      document_ids.push(pdfData[i]._id)
+    }
+
+    const tfidf = new TfIdf();
+    documents.forEach(document => {
+      tfidf.addDocument(document);
+    });
+
+    const query = req.params.query;
+
+    const scores = [];
+    tfidf.tfidfs(query, (index, score) => {
+      if (score > 0) {
+        scores.push({ document_id: document_ids[index], score });
+      }
+    });
+
+    scores.sort((a, b) => b.score - a.score);
+
+    // Assign rank to each score
+    for (let i = 0; i < scores.length; i++) {
+      scores[i].rank = i + 1;
+    }
+
+    res.json(scores);
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).send("An error occurred while retrieving the data.");
   }
 });
 
@@ -446,45 +487,6 @@ function requireAuth(req, res, next) {
 }
 
 
-app.get('/showFiless/:query', requireAuth, async (req, res) => {
-  try {
-    let documents = []
-    let document_ids = []
-    const pdfData = await Pdf_data.find({});
-    for (let i = 0; i < pdfData.length; i++) {
-      se = pdfData[i].sentences.join(' ')
-      documents.push(se)
-      document_ids.push(pdfData[i]._id)
-    }
-
-    const tfidf = new TfIdf();
-    documents.forEach(document => {
-      tfidf.addDocument(document);
-    });
-
-    const query = req.params.query;
-
-    const scores = [];
-    tfidf.tfidfs(query, (index, score) => {
-      if (score > 0) {
-        scores.push({ document_id: document_ids[index], score });
-      }
-    });
-
-    scores.sort((a, b) => b.score - a.score);
-
-    // Assign rank to each score
-    for (let i = 0; i < scores.length; i++) {
-      scores[i].rank = i + 1;
-    }
-
-    res.json(scores);
-
-  } catch (err) {
-    console.error(err);
-    res.status(500).send("An error occurred while retrieving the data.");
-  }
-});
 
 
 
