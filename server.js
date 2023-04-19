@@ -12,6 +12,10 @@ const path = require('path');
 const PDFJS = require('pdfjs-dist');
 const pdfPoppler = require('pdf-poppler');
 const stopword = require('stopword');
+const auth = require('basic-auth');
+const natural = require('natural');
+const TfIdf = natural.TfIdf;
+
 
 // Parse JSON request bodies
 app.use(bodyParser.json());
@@ -19,7 +23,7 @@ app.use(bodyParser.json());
 // Parse URL-encoded request bodies
 app.use(bodyParser.urlencoded({ extended: true }));
 
-// connect to database
+// connect to mongoDB database
 var mongoDB = process.env.PDF_DATABASE_URL;
 mongoose.Promise = global.Promise;
 
@@ -29,11 +33,13 @@ mongoose.connect(mongoDB , {
 });
 
 var db = mongoose.connection;
+
 //Bind connection to error event (to get notification of connection errors)
 db.on('error', console.error.bind(console, 'MongoDB connection error:'));
 db.once('open', function() {
   console.log('Successfully connected to MongoDB database at ' + mongoDB);
 });
+
 
 
 // Initialize Firebase Storage
@@ -48,12 +54,15 @@ const multer = Multer({
   storage: Multer.memoryStorage(),
 });
 
+
+// API to upload files to firebase and mongoDB
 app.post('/upload', multer.array('files'), async (req, res) => {
   const files = req.files;
 
+  // Loop through each uploaded file and upload it to firebase Storage
   for (let i = 0; i < files.length; i++) {
     const file = files[i];
-    const fileName = Date.now() + '-' + file.originalname;
+    const fileName = Date.now() + '-' + file.originalname; //give the file a unique name
     const fileBuffer = file.buffer;
 
     // Create a new blob in the bucket and upload the file data.
@@ -78,7 +87,7 @@ app.post('/upload', multer.array('files'), async (req, res) => {
 
       // Drop empty lines from the list
       const nonEmptyLines = lines.filter(line => line.trim() !== '');
-      const fileSizeInKB = file.size / 1024;
+      const fileSizeInKB = file.size / 1024; // get file size in KB
 
       // Create a new Pdf_data instance with the filename, current date, and lines
       const pdfData = new Pdf_data({
@@ -98,12 +107,32 @@ app.post('/upload', multer.array('files'), async (req, res) => {
 
   res.status(200).send(`${files.length} files uploaded successfully.`);
 });
-///
 
-//////
+// API to show all files information from MongoDB
+app.get('/showFiles', requireAuth, async (req, res) => {
+  try {
+    const pdfData = await Pdf_data.find({}, '-sentences');
+    res.json(pdfData);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send("An error occurred while retrieving the data.");
+  }
+});
 
-// Retrieve a stored PDF given the ID
-app.get('/file/:id', getParams,async (req, res) => {
+// API to show one file information from mongoodb with a given id
+app.get('/showFiles/:id', requireAuth,getParams, async (req, res) => {
+  try {
+    const file = res.file
+    const pdfData = await Pdf_data.find(file);
+    res.json(pdfData);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send("An error occurred while retrieving the data.");
+  }
+});
+
+// API to Retrieve a stored PDF given the ID
+app.get('/showPdf/:id',requireAuth, getParams,async (req, res) => {
   try {
     const name = res.file.fileName;
     const [files] = await bucket.getFiles();
@@ -125,112 +154,8 @@ app.get('/file/:id', getParams,async (req, res) => {
   }
 });
 
-
-app.get('/filee/:id', getParams, async (req, res) => {
-  try {
-    const name = res.file.fileName;
-    const [files] = await bucket.getFiles();
-
-    // Find the file with the given name
-    const file = files.find(file => file.name === name);
-
-    if (!file) {
-      // Return a 404 response if the file is not found
-      return res.status(404).send('File not found.');
-    }
-
-    // Get a readable stream for the file
-    const stream = file.createReadStream();
-
-    // Create a writable stream to save the file locally
-    const localFilePath = `./${name}`;
-    const writeStream = fs.createWriteStream(localFilePath);
-
-    // Pipe the file data to the writable stream
-    stream.pipe(writeStream);
-
-    // Wait for the file to be saved locally
-    writeStream.on('finish', () => {
-      res.status(200).send(`File ${name} was saved locally.`);
-    });
-
-    writeStream.on('error', (err) => {
-      console.error(err);
-      res.status(500).send('An error occurred while saving the file locally.');
-    });
-
-  } catch (err) {
-    console.error(err);
-    res.status(500).send('An error occurred while retrieving the file.');
-  }
-});
-
-const auth = require('basic-auth');
-
-function requireAuth(req, res, next) {
-  const credentials = auth(req);
-  if (!credentials || credentials.name !== 'admin' || credentials.pass !== 'admin') {
-    res.statusCode = 401;
-    res.setHeader('WWW-Authenticate', 'Basic realm="Enter your username and password."');
-    res.end('Access denied');
-  } else {
-    next();
-  }
-}
-// const username = 'admin';
-// const password = 'admin';
-// const encodedCredentials = btoa(`${username}:${password}`);
-// console.log(encodedCredentials); // "YWRtaW46YWRtaW4="
-
-app.get('/showFiles', requireAuth, async (req, res) => {
-  try {
-    const pdfData = await Pdf_data.find();
-    res.json(pdfData);
-  } catch (err) {
-    console.error(err);
-    res.status(500).send("An error occurred while retrieving the data.");
-  }
-});
-
-app.get('/convert', (req, res) => {
-  const pdfPath = 'epics.pdf';
-  const outputPath = 'pdf_folder';
-
-  const options = {
-    format: 'jpg',
-    out_dir: outputPath,
-    out_prefix: 'image',
-    page: 2 // the page number you want to convert
-  };
-
-  pdfPoppler.convert(pdfPath, options)
-    .then(() => res.send('Success'))
-    .catch(error => res.status(500).send(error));
-});
-
-app.get('/image', (req, res) => {
-  const imageName = 'image-2.jpg';
-  const imagePath = path.join(__dirname, 'pdf_folder', imageName);
-
-  // Check if the image file exists
-  fs.access(imagePath, fs.constants.F_OK, (err) => {
-    if (err) {
-      console.error(`Image not found: ${imagePath}`);
-      return res.status(404).send('Image not found.');
-    }
-
-    // Read the image file and send it as a response
-    const imageStream = fs.createReadStream(imagePath);
-    imageStream.pipe(res);
-  });
-});
-
-
-
-
-
-
-app.get('/process/:id/:pageNumber', getParams, async (req, res) => {
+// API to Retrieve an image of a specific page from a pdf file
+app.get('/showPdfImg/:id/:pageNumber',requireAuth, getParams, async (req, res) => {
   try {
     // 1. Save the file locally
     const name = res.file.fileName;
@@ -292,7 +217,8 @@ app.get('/process/:id/:pageNumber', getParams, async (req, res) => {
           });
         });
       } catch (error) {
-        res.status(500).send(error);
+        //res.status(500).send(error);
+        res.status(500).send('File Page does not exist');
       }
     });
 
@@ -307,30 +233,8 @@ app.get('/process/:id/:pageNumber', getParams, async (req, res) => {
   }
 });
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-//Search for the existence of a certain keyword in all stored PDF's
-app.get('/showFiles/:word',requireAuth, async (req, res) => {
+// API to Search for the existence of a certain keyword in all stored PDF's
+app.get('/showFilesByWord/:word',requireAuth, async (req, res) => {
   try {
     const word = req.params.word;
     // Use the Pdf_data model to find all PDF data in the database
@@ -364,13 +268,13 @@ app.get('/showFiles/:word',requireAuth, async (req, res) => {
 
 });
 
-// Return all the parsed sentences for a given PDF ID
-app.get('/showFileSentences/:id' , getParams, (req, res) => {
+// API to Return all the parsed sentences for a given PDF ID
+app.get('/showFileSentences/:id',requireAuth , getParams, (req, res) => {
   res.send(res.file.sentences)
 })
 
 //Check the occurrence of a word in PDF. Give the total number of times the word is found, in addition to all the sentences the word is found in
-app.get('/search/:id/:word', async (req, res) => {
+app.get('/search/:id/:word',requireAuth, async (req, res) => {
   try {
     const word = req.params.word;
     let totalOccurrence = 0;
@@ -408,25 +312,26 @@ app.get('/search/:id/:word', async (req, res) => {
 
 
 //Give the top 5 occurring words in a PDF – try to make sure that these words are relevant, so filtering out stop words may be a good idea (e.g. the, it, and, is, or, but)
-app.get('/topwords/:id', getParams, async (req, res) => {
+app.get('/topwords/:id', requireAuth, getParams, async (req, res) => {
   try {
     const content = res.file.sentences;
 
-    // Parse the PDF content and extract all the words
-    const words = content.join(' ').split(/[\s.,;]+/);
+    // Tokenize the PDF content and extract all the words
+    const tokenizer = new natural.WordTokenizer();
+    const words = tokenizer.tokenize(content.join(' '));
 
     // Filter out stop words
-    const filteredWords = stopword.removeStopwords(words, stopword.eng);
+    const filteredWords = stopword.removeStopwords(words, stopword.words);
 
     // Count the occurrence of each word and store it in a map
     const wordMap = new Map();
-    filteredWords.forEach(word => {
-      const count = wordMap.get(word) || 0;
-      wordMap.set(word, count + 1);
+    filteredWords.forEach((word) => {
+      const count = (wordMap.get(word) || 0) + 1;
+      wordMap.set(word, count);
     });
 
     // Sort the map by the occurrence count in descending order
-    const sortedWords = [...wordMap].sort((a, b) => b[1] - a[1]);
+    const sortedWords = [...wordMap.entries()].sort((a, b) => b[1] - a[1]);
 
     // Return the top 5 words with the highest occurrence count
     const topWords = sortedWords.slice(0, 5).map(([word, count]) => ({ word, count }));
@@ -438,8 +343,9 @@ app.get('/topwords/:id', getParams, async (req, res) => {
   }
 });
 
+
 //	Delete a PDF file and all its related data (given only the PDF ID)
-app.delete('/deleteFile/:id', getParams, async (req, res) => {
+app.delete('/deleteFile/:id',requireAuth, getParams, async (req, res) => {
   try {
 
     // Delete the PDF data from MongoDB
@@ -462,7 +368,7 @@ app.delete('/deleteFile/:id', getParams, async (req, res) => {
   }
 });
 
-app.delete('/deleteAllFiles', async (req, res) => {
+app.delete('/deleteAllFiles',requireAuth, async (req, res) => {
   try {
     // Get all PDF data from MongoDB
     const pdfDataList = await Pdf_data.find();
@@ -507,9 +413,7 @@ app.delete('/deleteAllFiles', async (req, res) => {
 });
 
 
-
-
-//a middleware function that detects the parameters of an API
+// a middleware function that detects the parameters of an API
 async function getParams(req, res, next) {
   let file
   try {
@@ -524,6 +428,66 @@ async function getParams(req, res, next) {
   res.file = file
   next()
 }
+
+//a middleware function to set a basic auth
+function requireAuth(req, res, next) {
+  const credentials = auth(req);
+  if (!credentials || credentials.name !== 'admin' || credentials.pass !== 'admin') {
+    res.statusCode = 401;
+    res.setHeader('WWW-Authenticate', 'Basic realm="Enter your username and password."');
+    res.end('Access denied');
+  } else {
+    next();
+  }
+  // const username = 'admin';
+// const password = 'admin';
+// const encodedCredentials = btoa(`${username}:${password}`);
+// console.log(encodedCredentials); // "YWRtaW46YWRtaW4="
+}
+
+
+app.get('/showFiless/:query', requireAuth, async (req, res) => {
+  try {
+    let documents = []
+    let document_ids = []
+    const pdfData = await Pdf_data.find({});
+    for (let i = 0; i < pdfData.length; i++) {
+      se = pdfData[i].sentences.join(' ')
+      documents.push(se)
+      document_ids.push(pdfData[i]._id)
+    }
+
+    const tfidf = new TfIdf();
+    documents.forEach(document => {
+      tfidf.addDocument(document);
+    });
+
+    const query = req.params.query;
+
+    const scores = [];
+    tfidf.tfidfs(query, (index, score) => {
+      if (score > 0) {
+        scores.push({ document_id: document_ids[index], score });
+      }
+    });
+
+    scores.sort((a, b) => b.score - a.score);
+
+    // Assign rank to each score
+    for (let i = 0; i < scores.length; i++) {
+      scores[i].rank = i + 1;
+    }
+
+    res.json(scores);
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).send("An error occurred while retrieving the data.");
+  }
+});
+
+
+
 
 // Start the server
 app.listen(3000, () => {
