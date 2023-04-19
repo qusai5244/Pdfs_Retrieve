@@ -174,7 +174,7 @@ app.get('/showPdfImg/:id/:pageNumber',requireAuth, getParams, async (req, res) =
     const stream = file.createReadStream();
 
     // Create a writable stream to save the file locally
-    const localFilePath = `./pdf_folder/${name}`;
+    const localFilePath = `./models/${name}`;
     const writeStream = fs.createWriteStream(localFilePath);
 
     // Pipe the file data to the writable stream
@@ -184,7 +184,7 @@ app.get('/showPdfImg/:id/:pageNumber',requireAuth, getParams, async (req, res) =
     writeStream.on('finish', async () => {
       // 2. Convert PDF to image
       const pdfPath = localFilePath;
-      const outputPath = 'pdf_folder';
+      const outputPath = 'models';
       const options = {
         format: 'jpg',
         out_dir: outputPath,
@@ -197,7 +197,7 @@ app.get('/showPdfImg/:id/:pageNumber',requireAuth, getParams, async (req, res) =
 
         // 3. Send the image as a response
         const imageName = `image-${page_number}.jpg`; // Use the correct image name based on page number
-        const imagePath = path.join(__dirname, 'pdf_folder', imageName);
+        const imagePath = path.join(__dirname, 'models', imageName);
 
         // Check if the image file exists
         fs.access(imagePath, fs.constants.F_OK, (err) => {
