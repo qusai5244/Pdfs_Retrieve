@@ -2,15 +2,13 @@
 ## API Reference
 
 - All APIs are protected with a basic auth, so before testing any api make sure to include this in the header.
-Key: Authorization
-Value: Basic YWRtaW46YWRtaW4
+| Key           | Value         |
+| ------------- | ------------- |
+| `Authorization`  | `Basic YWRtaW46YWRtaW4`  |
+
 
 
 - To be able to upload pdf files via postman make sure to include this in the header as well.
-| Key | Value     |
-| :-------- | :------- |
-| `Content` | `multipart/form-data` |
-
 | Key           | Value         |
 | ------------- | ------------- |
 | `Content`  | `multipart/form-data`  |
