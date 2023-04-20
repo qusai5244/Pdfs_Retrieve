@@ -59,54 +59,63 @@ const multer = Multer({
 app.post('/upload', multer.array('files'), async (req, res) => {
   const files = req.files;
 
-  // Loop through each uploaded file and upload it to firebase Storage
-  for (let i = 0; i < files.length; i++) {
-    const file = files[i];
-    const fileName = Date.now() + '-' + file.originalname; //give the file a unique name
-    const fileBuffer = file.buffer;
+  try {
+    // Upload all files in parallel
+    await Promise.all(files.map(async (file) => {
+      const fileName = Date.now() + '-' + file.originalname; //give the file a unique name
+      const fileBuffer = file.buffer;
 
-    // Create a new blob in the bucket and upload the file data.
-    const blob = bucket.file(fileName);
-    const blobStream = blob.createWriteStream({
-      resumable: false,
-      contentType: file.mimetype,
-    });
-
-    blobStream.on('error', (err) => {
-      console.log(err);
-      res.status(500).send({ message: 'Error uploading file.' });
-    });
-
-    blobStream.on('finish', async () => {
-      // Parse the PDF file
-      const data = await pdf(fileBuffer);
-      const lines = [];
-      data.text.split('\n').forEach(line => {
-        lines.push(line);
+      // Create a new blob in the bucket and upload the file data.
+      const blob = bucket.file(fileName);
+      const blobStream = blob.createWriteStream({
+        resumable: false,
+        contentType: file.mimetype,
       });
 
-      // Drop empty lines from the list
-      const nonEmptyLines = lines.filter(line => line.trim() !== '');
-      const fileSizeInKB = file.size / 1024; // get file size in KB
+      await new Promise((resolve, reject) => {
+        blobStream.on('error', (err) => {
+          console.log(err);
+          reject(err);
+        });
 
-      // Create a new Pdf_data instance with the filename, current date, and lines
-      const pdfData = new Pdf_data({
-        fileName: fileName,
-        createdAt: new Date(),
-        pages_number: data.numpages,
-        sentences: nonEmptyLines,
-        size: fileSizeInKB.toFixed(2),
+        blobStream.on('finish', async () => {
+          // Parse the PDF file
+          const data = await pdf(fileBuffer);
+          const lines = [];
+          data.text.split('\n').forEach(line => {
+            lines.push(line);
+          });
+
+          // Drop empty lines from the list
+          const nonEmptyLines = lines.filter(line => line.trim() !== '');
+          const fileSizeInKB = file.size / 1024; // get file size in KB
+
+          // Create a new Pdf_data instance with the filename, current date, and lines
+          const pdfData = new Pdf_data({
+            fileName: fileName,
+            createdAt: new Date(),
+            pages_number: data.numpages,
+            sentences: nonEmptyLines,
+            size: fileSizeInKB.toFixed(2),
+          });
+
+          // Save the Pdf_data instance to the database
+          await pdfData.save();
+
+          resolve();
+        });
+
+        blobStream.end(fileBuffer);
       });
+    }));
 
-      // Save the Pdf_data instance to the database
-      await pdfData.save();
-    });
-
-    blobStream.end(fileBuffer);
+    res.status(200).send(`${files.length} files uploaded successfully.`);
+  } catch (error) {
+    console.log(error);
+    res.status(500).send({ message: 'Error uploading files.' });
   }
-
-  res.status(200).send(`${files.length} files uploaded successfully.`);
 });
+
 
 // API to show all files information from MongoDB
 app.get('/showFiles', requireAuth, async (req, res) => {
