@@ -11,6 +11,11 @@ Value: Basic YWRtaW46YWRtaW4
 | :-------- | :------- |
 | `Content` | `multipart/form-data` |
 
+| Key           | Value         |
+| ------------- | ------------- |
+| Content Cell  | Content Cell  |
+| Content Cell  | Content Cell  |
+
 #
 Testing APIs
 - Upload pdfs
