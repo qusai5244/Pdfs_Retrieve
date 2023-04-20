@@ -67,9 +67,9 @@ Select the "form-data" option in the body, include the specified item, and make 
 ```
   GET /showFiles/:id
 ```
--Get a pdf file with a given id
+- Get a pdf file with a given id
 ```
-  GET /showFiles/:id
+  GET /showPdf/:id
 ```
 
 - Get an image of a specific page from a pdf file
