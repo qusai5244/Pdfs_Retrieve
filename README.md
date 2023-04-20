@@ -1,4 +1,32 @@
 
+# PDF Files Management REST APIs 
+This is a Node.js-based REST API that allows users to upload PDF files, extract text from PDFs, search for specific words, and delete files from Firebase Storage and MongoDB.
+
+When a user uploads a PDF file, the API parses the text from the file and saves it to a MongoDB database along with metadata such as the file name, date uploaded, and file size. The API also uploads the PDF file to Firebase Storage for future retrieval.
+
+The API provides several endpoints for retrieving information about uploaded files and for performing searches on the stored PDF text. Users can retrieve all stored files' information or retrieve the information and the sentences of a specific file using its ID. They can also retrieve a specific page from a PDF file as an image, search for a word's existence in all stored PDFs and give its total number of occurrences, get the top 5 occurring words in a PDF, and delete a file given its ID.
+
+## Setup
+- Clone this project 
+- Inside the project root run
+```bash
+npm install
+```
+- Make sure you have your MongoDB service running on localhost
+```bash
+mongodb://127.0.0.1:27017
+```
+
+once these steps are completed 
+- start the server by running
+```bash
+npm run devStart
+```
+- the server will then run on the localhost on port 3000
+```bash
+http://localhost:3000
+```
+
 ## API Reference
 
 - All APIs are protected with a basic auth, so before testing any api make sure to include this in the header.
@@ -36,6 +64,10 @@ Select the "form-data" option in the body, include the specified item, and make 
 ```
 - Get a pdf data with a given id
 
+```
+  GET /showFiles/:id
+```
+-Get a pdf file with a given id
 ```
   GET /showFiles/:id
 ```
