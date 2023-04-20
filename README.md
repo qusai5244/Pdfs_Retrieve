@@ -31,7 +31,7 @@ Select the "form-data" option in the body, include the specified item, and make 
 
 - Get all pdfs data
 
-```http
+```
   GET /showFiles
 ```
 - Get a pdf data with a given id
