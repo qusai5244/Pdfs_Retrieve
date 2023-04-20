@@ -1,8 +1,79 @@
-PDF File Management API
-This is a Node.js-based REST API that allows users to upload PDF files, extract text from PDFs, search for specific words, and delete files from Firebase Storage and MongoDB.
 
-When a user uploads a PDF file, the API parses the text from the file and saves it to a MongoDB database along with metadata such as the file name, date uploaded, and file size. The API also uploads the PDF file to Firebase Storage for future retrieval.
+## API Reference
 
-The API provides several endpoints for retrieving information about uploaded files and for performing searches on the stored PDF text. Users can retrieve all stored files' information or retrieve the information and the sentences of a specific file using its ID. They can also retrieve a specific page from a PDF file as an image, search for a word's existence in all stored PDFs and give its total number of occurrences, get the top 5 occurring words in a PDF, and delete a file given its ID.
+- All APIs are protected with a basic auth, so before testing any api make sure to include this in the header
+| Key | Value     |
+| :-------- | :------- |
+| `Authorization` | `Basic YWRtaW46YWRtaW4` |
 
-To run the API, the user must first install the required packages using the 'npm install' command. They must also set the required environment variables in a .'env' file, including the MongoDB database URL, Firebase Storage details, and project ID. Once everything is set up, the user can run the API using the 'npm run devstart' command. The API can be accessed on the localhost on port 3000, and the endpoints can be tested using a tool like Postman.
+- To be able to upload pdf files via postman make sure to include this in the header as well
+| Key | Value     |
+| :-------- | :------- |
+| `Content-Type` | `multipart/form-data` |
+
+#
+Testing APIs
+- Upload pdfs
+
+```http
+  POST /upload
+```
+
+Select the "form-data" option in the body, include the specified item, and make sure that the value type is set to "File".
+| Key | Value     |
+| :-------- | :------- |
+| `files` | `select files` |
+
+- Get all pdfs data
+
+```http
+  GET /showFiles
+```
+- Get a pdf data with a given id
+
+```http
+  GET /showFiles/:id
+```
+
+- Get an image of a specific page from a pdf file
+
+```http
+  GET /showPdfImg/:id/:pageNumber
+```
+
+- Search for the existence of a certain keyword in all stored PDF's
+```http
+  GET /showFilesByWord/:word
+```
+
+- Get all the parsed sentences for a given PDF ID
+```http
+  GET /showFileSentences/:id
+```
+
+- Check the occurrence of a word in PDF file
+```http
+  GET /searchForWord/:id/:word
+```
+
+- Get the top 5 occurring words in a PDF
+```http
+  GET /topwords/:id
+```
+
+- Get the relevant Document for a query in ranks using TFIDF method
+```http
+  GET /showRelevantFiles/:query
+```
+
+- Delete a PDF file and all its related data with a given id
+```http
+  DELETE /deleteFile/:id
+```
+
+- Delete all PDFs files and all its related data
+```http
+  DELETE /deleteFile
+```
+
+

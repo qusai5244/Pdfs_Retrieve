@@ -123,8 +123,8 @@ app.get('/showFiles', requireAuth, async (req, res) => {
 app.get('/showFiles/:id', requireAuth,getParams, async (req, res) => {
   try {
     const file = res.file
-    const pdfData = await Pdf_data.find(file);
-    res.json(pdfData);
+    const pdfData = await Pdf_data.find(file, '-sentences');
+    res.status(200).json(pdfData);
   } catch (err) {
     console.error(err);
     res.status(500).send("An error occurred while retrieving the data.");
@@ -260,7 +260,7 @@ app.get('/showFilesByWord/:word',requireAuth, async (req, res) => {
     }
 
     // Return the matching PDF data as a JSON response
-    res.json(matchingData);
+    res.status(200).json(matchingData);
   } catch (err) {
     console.error(err);
     res.status(500).send("An error occurred while retrieving the PDF data.");
@@ -270,7 +270,7 @@ app.get('/showFilesByWord/:word',requireAuth, async (req, res) => {
 
 // API to Return all the parsed sentences for a given PDF ID
 app.get('/showFileSentences/:id',requireAuth , getParams, (req, res) => {
-  res.send(res.file.sentences)
+  res.status(200).send(res.file.sentences)
 })
 
 //Check the occurrence of a word in PDF. Give the total number of times the word is found, in addition to all the sentences the word is found in
@@ -311,7 +311,7 @@ app.get('/searchForWord/:id/:word',requireAuth, async (req, res) => {
 });
 
 
-//Give the top 5 occurring words in a PDF – try to make sure that these words are relevant, so filtering out stop words may be a good idea (e.g. the, it, and, is, or, but)
+//Give the top 5 occurring words in a PDF
 app.get('/topwords/:id', requireAuth, getParams, async (req, res) => {
   try {
     const content = res.file.sentences;
@@ -376,7 +376,7 @@ app.get('/showRelevantFiles/:query', requireAuth, async (req, res) => {
       scores[i].rank = i + 1;
     }
 
-    res.json(scores);
+    res.status(200).json(scores);
 
   } catch (err) {
     console.error(err);
@@ -409,7 +409,7 @@ app.delete('/deleteFile/:id',requireAuth, getParams, async (req, res) => {
   }
 });
 
-app.delete('/deleteAllFiles',requireAuth, async (req, res) => {
+app.delete('/deleteFile',requireAuth, async (req, res) => {
   try {
     // Get all PDF data from MongoDB
     const pdfDataList = await Pdf_data.find();
