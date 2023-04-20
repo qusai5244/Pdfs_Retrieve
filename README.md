@@ -13,8 +13,8 @@ Value: Basic YWRtaW46YWRtaW4
 
 | Key           | Value         |
 | ------------- | ------------- |
-| Content Cell  | Content Cell  |
-| Content Cell  | Content Cell  |
+| `Content`  | `multipart/form-data`  |
+
 
 #
 Testing APIs
