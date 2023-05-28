@@ -8,7 +8,9 @@ The API provides several endpoints for retrieving information about uploaded fil
 
 ## Setup
 - Clone this project 
+- Fill the required parameters for firebase storage in Firebase_Admin_SDK.json and .env files
 - Inside the project root run
+
 ```bash
 npm install
 ```
